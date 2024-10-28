@@ -1,2 +1,9 @@
 /WebService-Solr-Tiny-*
 *.swp
+
+# Ignore generated files from Perl Build
+Build
+MYMETA.json
+MYMETA.yml
+_build_params
+blib/

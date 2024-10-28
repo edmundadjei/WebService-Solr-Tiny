@@ -1,6 +1,7 @@
 {{$NEXT}}
 
     - Tweaks to minting process
+    - Add support for Solr's Realitime Get Handler
 
 0.002
 

@@ -39,6 +39,13 @@ WebService::Solr::Tiny - Perl interface to Apache Solr
      start      => 10,
  );
 
+ # Retrieve documents by ID
+ my $document_ids = [1, 2, 3];
+ $solr->get($document_ids);
+
+ # Pass extra parameters to Solr where retriving the documents
+ $solr->get($document_ids, debugQuery => 'true');
+
 =head1 DESCRIPTION
 
 WebService::Solr::Tiny is similar to, and inspired by L<WebService::Solr>,
@@ -83,7 +90,7 @@ C<decode_json> from L<JSON::PP>.
 
 A hash reference with default parameters that will be passed along as part of
 every request. The values in this hash will be merged with those passed to
-C<search>. Defaults to an empty hash reference.
+C<search> and C<get>. Defaults to an empty hash reference.
 
 =item C<url>
 
@@ -115,6 +122,67 @@ content of the response.
 On success, the full content of the response will be passed to the code ref
 specified in the C<decoder> parameter to the constructor, and the result of
 this will be this method's return value.
+
+=head2 get
+
+Sends a request to the Solr 'get' endpoint. Takes an array reference of
+document IDs to be fetched and an optional list of key-value pairs to be
+used as additional parameters to qualify the request.
+
+The C<document_ids> parameter is expected to be an array reference
+containing the IDs of the documents to retrieve. If this parameter is not
+provided as an array reference, or if it is empty, the method will croak
+with an appropriate error message.
+
+The final set of parameters, including the document IDs, will be converted
+to a query parameter string using L<URI::Query::FromHash>. Each document
+ID will be added to the query string as a separate C<id> parameter,
+allowing multiple IDs to be requested in a single call.
+
+If any value has been set as part of the C<default_args> in the constructor,
+these will be merged with the arguments to this function.
+
+In the event of a failure of any kind (e.g., if the Solr request fails),
+this function will croak with the content of the response.
+
+On success, the full content of the response will be passed to the code
+reference specified in the C<decoder> parameter to the constructor, and the
+result of this will be this method's return value.
+
+=head3 Additional Resources
+
+For more information on the real-time get handler and its benefits,
+including faster retrieval of documents by ID, refer to the Solr documentation at
+L<https://solr.apache.org/guide/solr/latest/configuration-guide/realtime-get.html>.
+
+=head3 Parameters
+
+=over 4
+
+=item * C<document_ids>
+
+An array reference containing the IDs of the documents to fetch. This is a
+required parameter.
+
+=item * C<%args>
+
+An optional list of additional key-value pairs to be sent as query
+parameters. These parameters will be merged with any default arguments set
+in the constructor.
+
+=back
+
+=head3 Exceptions
+
+This method can croak under the following conditions:
+
+=over 4
+
+=item * If C<document_ids> is not provided as an array reference.
+
+=item * If C<document_ids> is empty (i.e., no document IDs provided).
+
+=back
 
 =head1 PERFORMANCE
 
