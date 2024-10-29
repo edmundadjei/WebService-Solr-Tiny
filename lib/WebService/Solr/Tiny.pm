@@ -2,7 +2,7 @@ package WebService::Solr::Tiny 0.002;
 
 use v5.20;
 use warnings;
-use experimental qw/lexical_subs postderef signatures state/;
+use experimental qw/lexical_subs postderef signatures/;
 
 use Exporter 'import';
 use URI::Query::FromHash 0.003;
@@ -12,18 +12,20 @@ our @EXPORT_OK = qw/solr_escape solr_query/;
 sub new ( $class, %args ) {
     my $self = bless \%args, $class;
 
-    $self->{agent}
-        //= do { require HTTP::Tiny; HTTP::Tiny->new( keep_alive => 1 ) };
-    $self->{decoder} //= do { require JSON::PP; \&JSON::PP::decode_json };
+    $self->{agent}        //=
+        do { require HTTP::Tiny; HTTP::Tiny->new( keep_alive => 1 ) };
+    $self->{decoder}      //=
+        do { require JSON::PP; \&JSON::PP::decode_json };
     $self->{default_args} //= {};
     $self->{url}          //= 'http://localhost:8983/solr/select';
-
+    $self->{g_url}          =
+        do { my $url = $self->{url}; $url =~ s/select/get/; $url };
     $self;
 }
 
 sub search ( $self, $q = '', %args ) {
-    my $url = $self->{url} . '?'
-        . hash2query { $self->{default_args}->%*, q => $q, %args };
+    my $url = $self->{url} . '?' .
+        hash2query { $self->{default_args}->%*, q => $q, %args };
 
     $self->_request($url);
 }
@@ -34,13 +36,8 @@ sub get ( $self, $document_ids, %args ) {
         Carp::croak("Expected an array reference for 'document_ids'");
     }
 
-    state $rt_get_base_url
-        = do { my $url = $self->{url}; $url =~ s/select/get/; $url };
-
-    my $url
-        = $rt_get_base_url . '?'
-        . hash2query { $self->{default_args}->%*, id => $document_ids,
-        %args };
+    my $url = $self->{g_url} . '?' .
+        hash2query { $self->{default_args}->%*, id => $document_ids, %args };
 
     $self->_request($url);
 }
@@ -57,11 +54,11 @@ sub _request ( $self, $url ) {
     $self->{decoder}( $reply->{content} );
 }
 
-sub solr_escape ($q) { $q =~ s/([\Q+-&|!(){}[]^"~*?:\\\E])/\\$1/gr }
+sub solr_escape ( $q ) { $q =~ s/([\Q+-&|!(){}[]^"~*?:\\\E])/\\$1/gr }
 
 # For solr_query
 my ( %struct, %value, %op );
-sub solr_query ($x) { $struct{ARRAY}->( ref $x eq 'ARRAY' ? $x : [$x] ) }
+sub solr_query ( $x ) { $struct{ARRAY}->( ref $x eq 'ARRAY' ? $x : [ $x ] ) }
 
 my sub dispatch ( $table, $name, @args ) {
     ( $table->{$name} // die "Cannot dispatch to $name" )->(@args);
@@ -73,20 +70,19 @@ my sub pair ( $k, $v ) {
     if ( ref $v eq 'ARRAY' && ( $v->[0] // '' ) =~ /^-(AND|OR)$/i ) {
         my ( $op, undef, @val ) = ( uc $1, @$v );
         return sprintf '(%s)',
-            join " $op ", map '(' . $struct{HASH}->( { $k => $_ } ) . ')',
-            @val;
+            join " $op ", map '(' . $struct{HASH}->({ $k => $_ }) . ')', @val;
     }
 
     dispatch( \%value, ref $v || 'SCALAR', $k, $v );
 }
 
-$struct{HASH} = sub ($x) {
+$struct{HASH} = sub( $x ) {
     join ' AND ', map {
         /^-(.+)/ ? dispatch( \%op, $1, $x->{$_} ) : pair( $_, $x->{$_} )
     } sort keys %$x;
 };
 
-$struct{ARRAY} = sub ($x) {
+$struct{ARRAY} = sub ( $x ) {
     '(' . join( ' OR ', map dispatch( \%struct, ref $_, $_ ), @$x ) . ')';
 };
 
@@ -104,11 +100,11 @@ $value{ARRAY} = sub ( $k, $v ) {
     '(' . join( ' OR ', map $value{SCALAR}->( $k, $_ ), @$v ) . ')';
 };
 
-$op{default}   = sub ($v) { pair( '', $v ) };
+$op{default}   = sub (     $v ) { pair( '', $v ) };
 $op{require}   = sub ( $k, $v ) { qq(+$k:") . solr_escape($v) . '"' };
 $op{prohibit}  = sub ( $k, $v ) { qq(-$k:") . solr_escape($v) . '"' };
-$op{range}     = sub ( $k, $v ) {"$k:[$v->[ 0 ] TO $v->[ 1 ]]"};
-$op{range_exc} = sub ( $k, $v ) {"$k:{$v->[ 0 ] TO $v->[ 1 ]}"};
+$op{range}     = sub ( $k, $v ) { "$k:[$v->[ 0 ] TO $v->[ 1 ]]" };
+$op{range_exc} = sub ( $k, $v ) { "$k:{$v->[ 0 ] TO $v->[ 1 ]}" };
 $op{range_inc} = $op{range};
 
 $op{boost} = sub ( $k, $extra ) {
