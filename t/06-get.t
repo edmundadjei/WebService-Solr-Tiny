@@ -1,7 +1,9 @@
 use Test2::V0;
 use WebService::Solr::Tiny;
 
-my $solr = WebService::Solr::Tiny->new( agent => mock {} => add =>
+my $solr = WebService::Solr::Tiny->new(
+    base_url => "http://localhost:8983/solr/",
+    agent => mock {} => add =>
         [ get => sub { $::req = pop; { content => '{}', success => 1 } } ] );
 
 subtest 'Fetching documents but id' => sub {
@@ -48,7 +50,7 @@ subtest 'Fetching documents but id' => sub {
         'original endpoint is not changed';
 };
 
-subtest 'Execptions' => sub {
+subtest 'Exceptions' => sub {
     like dies { $solr->get }, qr/Too few arguments/;
 
     like dies { $solr->get(undef) }, qr/Expected an array reference/;
@@ -56,6 +58,20 @@ subtest 'Execptions' => sub {
     like dies { $solr->get(1) }, qr/Expected an array reference/;
 
     like dies { $solr->get( [] ) }, qr/Expected an array reference/;
+
+    like dies { WebService::Solr::Tiny->new(
+        base_url => "http://localhost:8983/solr/",
+        url => "http://localhost:8983/solr/select",
+        agent => mock {} => add =>
+            [ get => sub { $::req = pop; { content => '{}', success => 1 } } ] );
+    }, qr/Cannot specify both 'url' and 'base_url'./;
+
+    my $solr = WebService::Solr::Tiny->new(
+        url => "http://localhost:8983/solr/",
+        agent => mock {} => add =>
+            [ get => sub { $::req = pop; { content => '{}', success => 1 } } ] );
+
+    like dies { $solr->get( [1,2,3] ) }, qr/construct it with 'base_url'/;
 };
 
 done_testing;

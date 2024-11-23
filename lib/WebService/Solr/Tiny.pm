@@ -17,41 +17,53 @@ sub new ( $class, %args ) {
     $self->{decoder}      //=
         do { require JSON::PP; \&JSON::PP::decode_json };
     $self->{default_args} //= {};
+
+    if ( $args{base_url} ) {
+        if ( $self->{url} ){
+            require Carp;
+            Carp::croak("Cannot specify both 'url' and 'base_url'. Please use 'base_url' only.");
+         }
+        $self->{base_url} =~ s|/$||;
+        $self->{url} = $self->{base_url} . '/select';
+    }
+
     $self->{url}          //= 'http://localhost:8983/solr/select';
-    $self->{g_url}          =
-        do { my $url = $self->{url}; $url =~ s/select/get/; $url };
     $self;
+}
+
+my sub request ( $agent, $decoder, $url ) {
+    my $reply = $agent->get($url);
+
+    unless ( $reply->{success} ) {
+        require Carp;
+        Carp::croak("Solr request failed - $reply->{content}");
+    }
+
+    $decoder->( $reply->{content} );
 }
 
 sub search ( $self, $q = '', %args ) {
     my $url = $self->{url} . '?' .
         hash2query { $self->{default_args}->%*, q => $q, %args };
 
-    $self->_request($url);
+    request($self->{agent}, $self->{decoder}, $url);
 }
 
 sub get ( $self, $document_ids, %args ) {
+    unless ( $self->{base_url} ){
+        require Carp;
+        Carp::croak "To use the 'get' method on this instance, construct it with 'base_url' instead of 'url'";
+    };
+
     unless ( ref $document_ids eq 'ARRAY' && $document_ids->@* ) {
         require Carp;
         Carp::croak("Expected an array reference for 'document_ids'");
     }
 
-    my $url = $self->{g_url} . '?' .
+    my $url = $self->{base_url} . '/get?' .
         hash2query { $self->{default_args}->%*, id => $document_ids, %args };
 
-    $self->_request($url);
-}
-
-sub _request ( $self, $url ) {
-    my $reply = $self->{agent}->get($url);
-
-    unless ( $reply->{success} ) {
-        require Carp;
-
-        Carp::croak("Solr request failed - $reply->{content}");
-    }
-
-    $self->{decoder}( $reply->{content} );
+    request($self->{agent}, $self->{decoder}, $url);
 }
 
 sub solr_escape ( $q ) { $q =~ s/([\Q+-&|!(){}[]^"~*?:\\\E])/\\$1/gr }
